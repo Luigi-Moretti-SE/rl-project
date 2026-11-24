@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment & IDE
+.env
+.vscode/
+.idea/
+.DS_Store
+
+# RL checkpoints & large logs
+*.pt
+*.pth
+*.ckpt
+*.zip
+checkpoints/
+runs/
+wandb/
