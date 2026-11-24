@@ -5,7 +5,7 @@ Train Reinforcement Learning (RL) agents to play the **Chrome Dino** endless run
 
 **Core Strategy:**
 1. **Fast Training in Python (`gymnasium`):** Build/wrap a faithful headless Chrome Dino environment in Python so agents can train at thousands of FPS with deterministic seeds.
-2. **Real-Browser Demo (Sim-to-Real Transfer):** Deploy the trained policies on the actual `chrome://dino` game via browser automation (Playwright/Selenium) for live evaluation and the final presentation demo.
+2. **Real-Browser Demo (Sim-to-Real Transfer):** Deploy the trained policies via a **Manifest V3 Chrome Extension** running on a locally hosted copy of the official Chromium T-Rex Runner (`http://localhost`) for zero-latency 60 FPS live evaluation and the final presentation demo.
 
 ---
 
@@ -49,7 +49,7 @@ Train Reinforcement Learning (RL) agents to play the **Chrome Dino** endless run
 2. **Tabular RL (Q-Learning / SARSA):** Discretized feature state to demonstrate fundamentals and analyze where discretization breaks down (e.g., high speed, multi-obstacle sequences).
 3. **Deep RL — Vector State (DQN / PPO):** Fast training, hyperparameter tuning, frame-skipping analysis, and reward-shaping ablations.
 4. **Deep RL — Pixel State (CNN-DQN):** Sample efficiency vs. vector state, handling day/night inversion (color-inversion augmentation or frame differencing).
-5. **Sim-to-Real Browser Transfer:** Evaluate Python-trained agents in real Chrome Dino via Playwright/Selenium and diagnose any sim-to-real performance gap.
+5. **Sim-to-Real Browser Transfer:** Export trained policies (JSON weights for MLP/tabular agents, ONNX for CNNs) into the Chrome Extension, evaluate on the real Chromium JS Dino engine, and diagnose any sim-to-real performance gap.
 
 ---
 
