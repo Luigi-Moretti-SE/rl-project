@@ -8,6 +8,14 @@ Requires Python 3.10 or newer.
 
 ```sh
 python -m pip install -r requirements.txt
+python play.py
+```
+
+Press **Space** to start, **Space** or **↑** to jump, **↓** to duck, and **R** to replay the same course. Use `python play.py --seed 7` to try another course. The preview uses Python's Tkinter and runs at about 30 ticks per second.
+
+To run the test suite:
+
+```sh
 python -m unittest discover -s tests -v
 ```
 
