@@ -70,3 +70,23 @@ From Chromium's `Runner.config` and `Trex.collisionBoxes`:
   - By default, MV3 content scripts run in an `ISOLATED` world and **cannot** see `window.Runner.instance_`.
   - Setting `"world": "MAIN"` in `manifest.json` under `content_scripts` executes the agent script directly in the page's JS context so it can read `Runner.instance_.tRex` and `Runner.instance_.horizon.obstacles` at 60 FPS with zero overhead.
   - *Tradeoff:* `MAIN` world scripts cannot call `chrome.*` APIs directly. If the popup/UI needs to switch policies or toggle the agent, pair a `MAIN` world runner script with an `ISOLATED` world bridge using `window.postMessage()`.
+
+---
+
+## 4. Adopted Simulation Environment (`seeded-dino-runner` / `env/dino.py`)
+
+Following `PROJECT_PLAN.md`, the team adopted the custom deterministic Gymnasium runner from `origin/seeded-dino-runner` (`env/dino.py`) as the core simulator for the 2×2 `{DQN, PPO} × {Nominal, Varied}` generalization study (keeping browser transfer as an optional post-experiment stretch goal):
+
+- **Runner & Physics (`DinoConfig` defaults):**
+  - Hitboxes: `RUNNER_WIDTH = 19`, `STANDING_HEIGHT = 29`, `DUCK_HEIGHT = 13` (swept horizontal collision per tick).
+  - Dynamics: `initial_speed = 5.5`, `max_speed = 10.0`, `acceleration = 0.0035`, `jump_velocity = 15`, `gravity = 2`, `fast_fall_velocity = 8`, `max_steps = 1500`.
+- **5 Hazard Types (`OBSTACLE_TYPES`, nominal weights `(4, 2, 1, 2, 1)`, `gap_range = (95, 190)`):**
+  - `rock` (`bottom=0, h=21, w∈[17,34]`) & `thorn` (`bottom=0, h=29, w∈[13,23]`): ground hazards (must jump).
+  - `skimmer` (`bottom=4, h=12, w∈[17,27]`): low flyer (`bottom < DUCK_HEIGHT`, must jump).
+  - `glider` (`bottom=19, h=14, w∈[23,32]`): mid flyer (`DUCK_HEIGHT <= bottom < STANDING_HEIGHT`, duck under).
+  - `soarer` (`bottom=39, h=15, w∈[20,31]`): high flyer (`bottom >= STANDING_HEIGHT`, safe to run under; jumping collides).
+- **11-Feature Softsign Observation (`v / (scale + |v|)`):**
+  - Order: `[height, velocity, speed, gap_1, bottom_1, width_1, height_1, gap_2, bottom_2, width_2, height_2]` (`0.0` for missing obstacles).
+  - `OBSERVATION_SCALES = [64, 16, 10, 160, 48, 32, 32, 160, 48, 32, 32]` — preserves monotonicity beyond nominal `max_speed` during `1.15×` and `1.25×` speed-shift evaluations.
+- **Reachability Constraint:**
+  - `gap_range = (78, 140)` at `1.25×` speed produces unavoidable collisions (e.g., `course_seed=12`), whereas `(95, 190)` and `(91, 145)` passed full-course reachability (`course_is_playable`) across `1.00×`, `1.15×`, and `1.25×`. Always validate frozen train/dev/eval course splits with `course_is_playable` before training.

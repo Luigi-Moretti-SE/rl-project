@@ -59,3 +59,23 @@ Keep pixel observations, reward shaping, and extra algorithms outside the initia
 - [Cobbe et al., Leveraging Procedural Generation to Benchmark Reinforcement Learning (ICML 2020)](https://proceedings.mlr.press/v119/cobbe20a.html)
 - [Agarwal et al., Deep Reinforcement Learning at the Edge of the Statistical Precipice (NeurIPS 2021)](https://proceedings.neurips.cc/paper_files/paper/2021/hash/f514cec81cb148559cf475e7426eed5e-Abstract.html)
 - [Original project proposal](IDEA.md) and [course brief](final_project.pdf)
+
+## Team division and timeline
+
+### Workload split (group of 3)
+
+| Member | Primary ownership | Concrete deliverables |
+| --- | --- | --- |
+| **Member 1** | Environment, splits & eval harness | Merge `seeded-dino-runner`, freeze disjoint train/dev/held-out `course_seed` lists, build held-out obstacle sequences, run feasibility checks on all frozen splits, and maintain the shared 50-seed evaluation runner |
+| **Member 2** | DQN pipeline & diagnostics | Implement and tune DQN (`Nominal` + `Varied`) across 5 seeds × 300k ticks, log crash types, and run matched-course failure replays (late jump, missed duck, 2nd-obstacle landing) |
+| **Member 3** | PPO pipeline, plots & presentation | Implement and tune PPO (`Nominal` + `Varied`) across 5 seeds × 300k ticks, generate uncertainty/robustness plots (`mean ± std` across seeds, survival vs. speed), and coordinate slides & written report |
+
+### Schedule (Nov 26 – Dec 22)
+
+- **Nov 26 – Nov 29 (Milestone 1 & pilot):** Merge `seeded-dino-runner` to `main`, freeze speed/layout splits after feasibility checks, and time short DQN/PPO pilot runs to confirm the 300k-tick budget and PPO `n_steps`.
+- **Nov 30 – Dec 4 (Milestone 2: tuning & shared harness):** Tune DQN and PPO hyperparameters on the dev split; finalize the shared 50-seed evaluator and diagnostic logging.
+- **Dec 5 – Dec 8 (Milestone 3: full runs & sign-up):** Run all 4 configurations × 5 seeds (`20` runs total) and evaluate frozen checkpoints across all suites. **By Dec 8:** submit group info in the Google Classroom spreadsheet (1 week before the talk).
+- **Dec 9 – Dec 12 (Diagnostics & plots):** Produce final tables, per-seed spread plots, survival-vs-speed curves, and matched-course failure replays. *(Optional stretch: browser transfer demo only if core results are complete.)*
+- **Dec 13 – Dec 14 (Rehearsal):** Finalize the 15-minute slide deck and rehearse talk + Q&A.
+- **Dec 15 (Presentation):** 15-minute talk + 5–10 min Q&A.
+- **Dec 16 – Dec 22 (Written report):** Integrate Q&A feedback and full technical details; submit report within 1 week of the presentation.
