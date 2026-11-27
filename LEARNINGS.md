@@ -93,3 +93,19 @@ Following `PROJECT_PLAN.md`, the team adopted the custom deterministic Gymnasium
 - **Sequence Holdout & Missing-Obstacle Invariants (2026-11-27):**
   - Default `generate_course()` samples obstacles i.i.d. from `OBSTACLE_TYPES`, meaning every consecutive pair/triple can appear in training unless explicitly filtered out via rejection sampling for the `Held-out obstacle sequences` split.
   - Because `DinoEnv.reset()` populates generated courses past `max_distance + RUNNER_WIDTH`, `obs[7:11] = [0, 0, 0, 0]` never appears mid-episode during training; any scripted `options["course"]` must likewise span past `max_steps * max_speed * speed_multiplier + RUNNER_WIDTH`. Under softsign normalization `v / (scale + |v|)`, `gap_2 = 0.0` is ambiguous with a 2nd obstacle immediately at the runner's front, which would also require sentinel padding or adaptation before any optional Chrome transfer (`horizon.obstacles` often has length 1).
+
+---
+
+## 5. Step 0 Contract & Step 1 Double DQN Pilot (2026-11-27)
+
+- **Shared Team Contract (`CONTRACT.md`, `agents/base.py`, `requirements.txt`):**
+  - Locked Python dependencies: `gymnasium>=1.2,<2`, `numpy>=1.24,<3`, `torch>=2.2,<3` (`torch 2.15.0` installed), and `matplotlib>=3.8,<4` (`matplotlib 3.11.2` installed).
+  - Kept `agents/base.py` PyTorch-free with a framework-agnostic `PolicyFn = Callable[[np.ndarray], int | Action]` interface so `eval/` and plotting scripts consume `timing_policy`, `make_random_policy`, `DQNAgent`, and future PPO agents identically.
+  - Standardized `splits/manifest.json` keys (`held_out_transitions`, `train_seeds`, `dev_seeds`, `eval_nominal_seeds`, `eval_sequence_courses`) and matching `<algo>_<regime>_seed<N>_{dev,eval}.json` log schemas.
+- **Double DQN Implementation (`agents/dqn.py`, `train_dqn.py`, `agents/course_sampler.py`, `agents/diagnostics.py`):**
+  - Uses `11 -> 128 -> 128 -> 3` Double DQN with Huber (`smooth_l1_loss`) TD error, gradient norm clipping (`1.0`), linear epsilon decay (`1.0 -> 0.02` over `40,000` ticks), and `weights_only=True` safe checkpoint saving plus `q_values(obs)` for post-hoc crash diagnostics.
+  - Replay buffer stores only `terminated` (collision) as the terminal mask rather than `terminated or truncated`, ensuring `1,500`-tick episode truncations properly bootstrap future values.
+  - `build_filtered_course()` applies transition rejection sampling and appends one extra obstacle past `max_distance + RUNNER_WIDTH` so `obs[7:11]` never collapses to `[0, 0, 0, 0]` mid-episode.
+- **Profiling & `50,000`-Tick Pilot Benchmark (`train_dqn.py --regime nominal --seed 0 --total-timesteps 50000 --eval-interval 25000 --dev-episodes 20`):**
+  - *Bottleneck lesson:* Running `is_course_playable()` (1,500-tick BFS) per episode reset takes `113.04 ms/call`, which stalled early exploration (`~25`-tick episodes) below `280 ticks/sec`. Moving `is_course_playable()` to offline split verification / tests and caching nominal filtered courses restored speed (`build_filtered_course`: `2.02 ms/call`; greedy `act`: `3,793 acts/s`; batched updates: `1,659 env_sps`; end-to-end training with `torch.set_num_threads(1)`: **`900 sps`**).
+  - *Measured `50k` pilot progression:* `step=0`: `31.8 ± 13.5` (`eps=1.000`) -> `step=25,000`: `28.1 ± 1.4` (`loss=0.4338`, `27.5s`) -> `step=50,000`: **`94.0 ± 100.7`** (`loss=0.4409`, `55.5s` total, `900 sps`). At `~900 sps`, a full `300,000`-tick run projects to **`~5.6 min`** (`~56 min` for all 10 DQN runs across `Nominal` and `Varied` × 5 seeds).
