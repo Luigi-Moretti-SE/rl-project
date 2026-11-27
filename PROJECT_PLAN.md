@@ -15,16 +15,16 @@ The main experiment is a controlled comparison of **algorithm × training divers
 
 - Headless Python Gymnasium environment under `env/`, with a fixed simulation tick and optional lightweight rendering for debugging.
 - Actions are run, jump, and duck. The original obstacle set includes ground hazards and low, middle, and high flying hazards. Parameterize acceleration, speed, jump dynamics, obstacle mix, and gaps.
-- Use the same normalized 11-feature observation for all learned policies: runner height and vertical velocity, current speed, then relative distance, bottom height, width, and height for each of the next two obstacles. Fix the normalization across training and evaluation and preserve values beyond the nominal speed range. Record the feature order and the encoding for missing obstacles.
-- Start with +1 per survived tick and −10 on collision. A collision terminates an episode. Reaching the time cap truncates it. Log survival ticks, distance, cleared obstacles, crash type, and the course seed independently of reward.
-- A course seed fixes the obstacle stream independently of the policy. Seed the training algorithm separately. Before training, verify same-seed replay, jump and duck collision cases, observations, and episode endings. Check representative courses from every proposed layout and speed setting using a full-course lookahead solver or scripted replay so an unavoidable collision does not masquerade as a policy failure.
+- Use the same normalized 11-feature observation for all learned policies: runner height and vertical velocity, current speed, then relative distance, bottom height, width, and height for each of the next two obstacles. Fix the normalization across training and evaluation and preserve values beyond the nominal speed range. Record the feature order and the encoding for missing obstacles (`0.0`). Because `DinoEnv` populates obstacles past `max_steps * max_speed * speed_multiplier + RUNNER_WIDTH`, all standard episodes keep 2 obstacles ahead and never emit `[0, 0, 0, 0]` mid-episode; scripted courses (`options["course"]`) must likewise exceed that distance so held-out evaluations do not accidentally trigger unseen missing-obstacle inputs.
+- Start with +1 per survived tick and −10 on collision. A collision terminates an episode. Reaching the time cap truncates it. Log survival ticks, distance, cleared obstacles, crash type, previous obstacle, and the course seed independently of reward.
+- A course seed fixes the obstacle stream independently of the policy. Seed the training algorithm separately. Before training, verify same-seed replay, jump and duck collision cases, observations, and episode endings. Check representative courses from every proposed layout and speed setting (including `1.25×`) using `course_is_playable` (or a scripted lookahead check) so an unavoidable collision does not masquerade as a policy failure. *(Note: `env/` intentionally uses `95–190` world-unit gaps rather than Chrome Dino's sparse 1-obstacle spacing so a 16-tick jump forces 2-obstacle lookahead and mid-air fast-fall rather than letting a 1-obstacle heuristic solve the benchmark.)*
 
 ## Experiment design
 
 | Training condition | DQN | PPO | Environment per episode |
 | --- | --- | --- | --- |
-| Nominal | Yes | Yes | Nominal speed curve and standard randomized layouts |
-| Varied | Yes | Yes | Sample a speed multiplier from 0.90–1.10 and vary obstacle frequencies and gaps within the training range |
+| Nominal | Yes | Yes | Nominal speed curve (`1.0×`), standard weights `(4, 2, 1, 2, 1)`, `gap_range=(95, 190)`, and held-out transitions excluded |
+| Varied | Yes | Yes | Sample `speed_multiplier ~ U[0.90, 1.10]`, safe gap range (`gap_min ~ U[91, 115]`, `gap_max ~ U[150, 210]`), and jittered obstacle weights around nominal (verified playable at `1.25×`), with held-out transitions excluded |
 
 Train both conditions on multiple seeded courses. This isolates the added effect of varying the environment parameters from the basic benefit of seeing many tracks. Also evaluate a speed-aware timing heuristic that uses the same observation and can choose when to jump or duck. Use a random policy as a smoke test.
 
@@ -32,16 +32,16 @@ Train both conditions on multiple seeded courses. This isolates the added effect
 | --- | --- | --- |
 | Held-out nominal | New course seeds drawn from the nominal generator | Generalization to new tracks from the same distribution |
 | Faster game | Same course layouts, speed curve multiplied by 1.15 and 1.25 | Robustness to less reaction time at speeds beyond training |
-| Held-out obstacle sequences | Nominal speed. Group existing hazard types into designated sequences excluded from both training regimes. Match obstacle counts and overall gap distribution as closely as possible. | Generalization to unfamiliar combinations of familiar hazards |
+| Held-out obstacle sequences | Nominal speed (`gap_range=(95, 190)`). Exclude 3–4 designated 2-obstacle transitions (e.g., `rock→glider`, `thorn→rock`, `skimmer→thorn`, `glider→soarer`) from both training regimes via rejection sampling; construct full-length (`≥ max_distance`) eval courses emphasizing those excluded pairs with matched marginal obstacle frequencies. | Generalization to unfamiliar combinations of familiar hazards |
 
-Freeze the speed levels and layout rules after feasibility checks on separate pilot tracks. Keep training, development, and final course seed lists disjoint. Choose hyperparameters and checkpoints only on the development split, with a comparable tuning budget per algorithm. Evaluate frozen policies on the same final courses within each suite. Keep a combined speed-and-layout shift as a stretch test if the individual shifts are informative.
+Freeze the speed levels, `Varied` sampling bounds, and layout rules after feasibility checks (`course_is_playable`) on separate pilot tracks. Keep training, development, and final course seed lists disjoint inside one tracked manifest (`splits/`), and verify `obs[7:11]` never drops to `[0, 0, 0, 0]` mid-episode on any split. Choose hyperparameters and checkpoints only on the development split, with a comparable tuning budget per algorithm. Evaluate frozen policies using one shared deterministic evaluator (`eval/`) on the same final courses within each suite. Keep a combined speed-and-layout shift as a stretch test if the individual shifts are informative.
 
 ## Run and report
 
 1. **Pilot.** Run the random and heuristic baselines, check that the stress tests are playable, and confirm that nominal performance leaves room to detect gains. Aim for a 1,500-tick episode cap and adjust it during the pilot if the cap hides meaningful differences. Time short training runs to size the full experiment.
-2. **Train.** Start with five independent training seeds per algorithm and regime, plus a target of 300,000 environment ticks per run (6 million ticks in total). Confirm or revise the budget after the pilot, then use the same budget across all configurations. Hold observations and rewards fixed. Save configs, seed lists, versions, checkpoints, and evaluation logs.
-3. **Evaluate.** Use 50 shared held-out course seeds per condition as the initial target. The primary metric is mean survival ticks up to the time cap. Report cap-reach rate, the change from nominal survival, and results at each shift severity. Show the per-training-seed means and their spread. The independently trained policy is the unit of replication for algorithm comparisons. Report uncertainty and avoid claiming a winner from overlapping or inconsistent results.
-4. **Diagnose.** Plot survival versus speed and summarize crashes by obstacle pattern. Replay a few matched-course failures in which one policy survives and another crashes. Check whether the policy jumped late, failed to duck, or landed into a second obstacle.
+2. **Train.** Start with five independent training seeds per algorithm and regime, plus a target of 300,000 environment ticks per run (6 million ticks in total). Align tick budgets and checkpoints (e.g., PPO `n_steps=2000` for `150` rollouts = exact `300,000` ticks; evaluate both DQN and PPO on `dev` every `25,000` ticks). Confirm or revise the budget after the pilot, then use the same budget across all configurations. Hold observations and rewards fixed. Save configs, seed lists, versions, checkpoints, and standardized evaluation logs.
+3. **Evaluate.** Use 50 shared held-out course seeds per condition as the initial target via the shared `eval/` harness. The primary metric is mean survival ticks up to the time cap. Report cap-reach rate, the change from nominal survival, and results at each shift severity. Show the per-training-seed means and their spread. The independently trained policy is the unit of replication for algorithm comparisons. Report uncertainty and avoid claiming a winner from overlapping or inconsistent results.
+4. **Diagnose.** Plot survival versus speed and summarize crashes automatically by `(prev_obstacle, crash_type)` and failure tags (`late_jump`, `missed_duck`, `jumped_into_soarer`, `second_obstacle_landing`). Replay a few matched-course failures in which one policy survives and another crashes. Check whether the policy jumped late, failed to duck, or landed into a second obstacle.
 
 ## Build order and deliverables
 
@@ -66,15 +66,15 @@ Keep pixel observations, reward shaping, and extra algorithms outside the initia
 
 | Member | Primary ownership | Concrete deliverables |
 | --- | --- | --- |
-| **Member 1** | Environment, splits & eval harness | Merge `seeded-dino-runner`, freeze disjoint train/dev/held-out `course_seed` lists, build held-out obstacle sequences, run feasibility checks on all frozen splits, and maintain the shared 50-seed evaluation runner |
-| **Member 2** | DQN pipeline & diagnostics | Implement and tune DQN (`Nominal` + `Varied`) across 5 seeds × 300k ticks, log crash types, and run matched-course failure replays (late jump, missed duck, 2nd-obstacle landing) |
-| **Member 3** | PPO pipeline, plots & presentation | Implement and tune PPO (`Nominal` + `Varied`) across 5 seeds × 300k ticks, generate uncertainty/robustness plots (`mean ± std` across seeds, survival vs. speed), and coordinate slides & written report |
+| **Member 1** | Environment, splits & shared eval contract | Add transition-holdout filtering for training courses, freeze disjoint train/dev/held-out seed manifests (`splits/`) and full-length held-out obstacle sequences, verify playability at `1.25×` and non-zero `obs[7:11]`, and build the shared 50-seed evaluator (`eval/`) with standardized crash-pattern logging |
+| **Member 2** | DQN pipeline & diagnostics | Implement and tune DQN (`Nominal` + `Varied`) across 5 seeds × 300k ticks (logging `dev` checkpoints every `25k` ticks), analyze crash-tag breakdowns, and run matched-course failure replays (`late_jump`, `missed_duck`, `jumped_into_soarer`, `second_obstacle_landing`) |
+| **Member 3** | PPO pipeline, plots & presentation | Implement and tune PPO (`Nominal` + `Varied`) across 5 seeds × 300k ticks (`n_steps=2000`, `dev` checkpoints every `25k` ticks), generate uncertainty/robustness plots (`mean ± std` across seeds, learning curves, survival vs. speed), and coordinate slides & written report |
 
 ### Schedule (Nov 26 – Dec 22)
 
-- **Nov 26 – Nov 29 (Milestone 1 & pilot):** Merge `seeded-dino-runner` to `main`, freeze speed/layout splits after feasibility checks, and time short DQN/PPO pilot runs to confirm the 300k-tick budget and PPO `n_steps`.
-- **Nov 30 – Dec 4 (Milestone 2: tuning & shared harness):** Tune DQN and PPO hyperparameters on the dev split; finalize the shared 50-seed evaluator and diagnostic logging.
-- **Dec 5 – Dec 8 (Milestone 3: full runs & sign-up):** Run all 4 configurations × 5 seeds (`20` runs total) and evaluate frozen checkpoints across all suites. **By Dec 8:** submit group info in the Google Classroom spreadsheet (1 week before the talk).
+- **Nov 26 – Nov 29 (Milestone 1, splits & shared contract):** Lock transition-holdout rules and safe `Varied` bounds, freeze `splits/` after `1.25×` reachability checks, land the shared `eval/` harness + crash logger, and time short DQN/PPO pilot runs to confirm `300k` ticks and `25k`-tick `dev` checkpoints.
+- **Nov 30 – Dec 4 (Milestone 2: tuning on dev):** Tune DQN and PPO hyperparameters on the shared `dev` split using aligned `25k`-tick checkpoint curves and verify logging parity across both pipelines.
+- **Dec 5 – Dec 8 (Milestone 3: full runs & sign-up):** Run all 4 configurations × 5 seeds (`20` runs total) and evaluate frozen checkpoints through the shared `eval/` harness across all suites. **By Dec 8:** submit group info in the Google Classroom spreadsheet (1 week before the talk).
 - **Dec 9 – Dec 12 (Diagnostics & plots):** Produce final tables, per-seed spread plots, survival-vs-speed curves, and matched-course failure replays. *(Optional stretch: browser transfer demo only if core results are complete.)*
 - **Dec 13 – Dec 14 (Rehearsal):** Finalize the 15-minute slide deck and rehearse talk + Q&A.
 - **Dec 15 (Presentation):** 15-minute talk + 5–10 min Q&A.

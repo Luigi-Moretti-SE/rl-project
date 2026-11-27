@@ -1,3 +1,5 @@
+> **Superseded by [`PROJECT_PLAN.md`](PROJECT_PLAN.md).** Kept for historical reference (earlier Chrome-Extension-first draft).
+
 # Implementation Plan: Chrome Dino RL (Group of 3)
 
 ## Goal Description
